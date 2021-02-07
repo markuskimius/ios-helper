@@ -1,0 +1,165 @@
+#!/bin/bash
+
+##############################################################################
+# ios: Script to help build a UNIX project for iOS.
+# https://github.com/markuskimius/ios
+#
+# Copyright (c)2021 Mark K. Kim
+# Released under the Apache license 2.0
+# https://github.com/markuskimius/ios/blob/master/LICENSE
+##############################################################################
+
+function usage() {
+    cat <<EOF
+Script to help build a UNIX project for iOS.
+
+Usage: ${SCRIPTNAME} [OPTIONS] ACTION
+
+OPTIONS:
+  -s                    Build it for the iOS Simulator.
+  -p PREFIX             Build into PREFIX
+
+ACTION:
+  configure [ARGS]      Run the configure script in the current directory with
+                        appropraite options to build for ios.
+
+  (any other commands)  Run the commands in the iOS environment.
+
+EOF
+}
+
+
+##############################################################################
+# PROGRAM BEGINS HERE
+
+SCRIPTNAME=$(basename "${BASH_SOURCE}")
+MAC_MINVER=${MAC_MINVER-darwin14.0.0}
+MAC_ARCH=${MAC_ARCH-$(uname -m)}
+IOS_MINVER=${IOS_MINVER-9.0}
+IOS_ARCH=${IOS_ARCH-arm64}
+PLATFORM=ios
+
+function main() {
+    local OPTIND OPTARG opt
+    local action
+
+    # Parse OPTIONS
+    while getopts "sp:h" opt; do
+        case "$opt" in
+            s)  PLATFORM=sim           ;;
+            P)  PREFIX=$OPTARG         ;;
+            h)  usage && return 0      ;;
+            *)  usage 1>&2 && return 1 ;;
+        esac
+    done
+    shift $((OPTIND-1))
+
+    # Validate ACTION
+    action=$1
+
+    case "$action" in
+        "")         echo "ACTION required" 1>&2
+                    usage 1>&2
+                    return 1                         ;;
+
+        help)       action=usage && shift            ;;
+        configure)  action=action-configure && shift ;;
+        *)          action=action-withenv            ;;  # Don't shift
+    esac
+
+    # Execute ACTION
+    "$action" "$@"
+}
+
+
+function action-withenv() {
+    (
+        setenv && "$@"
+    )
+}
+
+
+function action-configure() {
+    ! [[ -x ./configure ]] && echo "./configure: No such executable" && return 1
+
+    local opts=()
+    local env=()
+    local line
+
+    while IFS= read -r line; do
+        [[ "$line" == *--enable-shared* ]] && [[ " $* " != *\ --enable-shared[=\ ]* ]] && opts+=( "--disable-shared"          )
+        [[ "$line" == *--prefix*        ]] && [[ " $* " != *\ --prefix[=\ ]*        ]] && opts+=( "--prefix=$(config prefix)" )
+        [[ "$line" == *--host*          ]] && [[ " $* " != *\ --host[=\ ]*          ]] && opts+=( "--host=$(config host)"     )
+    done < <(./configure --help)
+
+    (
+        setenv
+
+        echo ./configure "${opts[@]}" "$@"
+        ./configure "${opts[@]}" "$@"
+    )
+}
+
+
+function setenv() {
+    export CC=$(config clang)
+    export LD=$(config clang)
+    export CXX=$(config clang)
+    export CPP=$(config cpp)
+    export CFLAGS=$(config CFLAGS)
+    export LDFLAGS=$(config LDFLAGS)
+    export CXXFLAGS=$(config CXXFLAGS)
+    export CPPFLAGS=$(config CPPFLAGS)
+    export CPATH="$(config incdir):$(config sysincdir):$CPATH"
+
+    export PATH="$(config prefix)/bin:$PATH"
+    export PKG_CONFIG_PATH="$(config prefix)/lib/pkgconfig:$PKG_CONFIG_PATH"
+}
+
+
+function config() {
+    local what=$1
+    local altarch=$IOS_ARCH
+
+    if [[ "$altarch" == "arm64" ]]; then
+        altarch=arm
+    fi
+
+    case "${PLATFORM},${what}" in
+        ios,sdk)      echo iphoneos        ;;
+        sim,sdk)      echo iphonesimulator ;;
+
+        ios,prefix)   echo "${PREFIX-${HOME}/ios}"                  ;;
+        sim,prefix)   echo "${PREFIX-${HOME}/ios-sim}"              ;;
+
+        ios,host)     echo "${altarch}-ios-${MAC_MINVER}"           ;;
+        sim,host)     echo "${MAC_ARCH}-ios-${MAC_MINVER}"          ;;
+
+        *,cpp)        echo $(xcrun --sdk $(config sdk) -f clang) -E ;;
+        *,clang)      xcrun --sdk $(config sdk) -f clang            ;;
+        *,sysroot)    xcrun --sdk $(config sdk) --show-sdk-path     ;;
+
+        *,incdir)     echo "$(config prefix)/include"               ;;
+        *,libdir)     echo "$(config prefix)/lib"                   ;;
+
+        *,sysincdir)  echo "$(config sysroot)/usr/include"          ;;
+        *,syslibdir)  echo "$(config sysroot)/usr/lib"              ;;
+
+        ios,CFLAGS)   echo "$CFLAGS   -miphoneos-version-min=$IOS_MINVER -arch $IOS_ARCH -isysroot $(config sysroot) -I$(config incdir) -I$(config sysincdir) -fPIC" ;;
+        ios,CXXFLAGS) echo "$CXXFLAGS -miphoneos-version-min=$IOS_MINVER -arch $IOS_ARCH -isysroot $(config sysroot) -I$(config incdir) -I$(config sysincdir) -fPIC" ;;
+        ios,CPPFLAGS) echo "$CPPFLAGS -miphoneos-version-min=$IOS_MINVER -arch $IOS_ARCH -isysroot $(config sysroot) -I$(config incdir) -I$(config sysincdir) -fPIC" ;;
+        ios,LDFLAGS)  echo "$LDFLAGS  -miphoneos-version-min=$IOS_MINVER -arch $IOS_ARCH -isysroot $(config sysroot) -L$(config libdir) -L$(config syslibdir) $LIBS" ;;
+
+        sim,CFLAGS)   echo "$CFLAGS   -mios-simulator-version-min=$IOS_MINVER -arch $MAC_ARCH -isysroot $(config sysroot) -I$(config incdir) -I$(config sysincdir) -fPIC" ;;
+        sim,CXXFLAGS) echo "$CXXFLAGS -mios-simulator-version-min=$IOS_MINVER -arch $MAC_ARCH -isysroot $(config sysroot) -I$(config incdir) -I$(config sysincdir) -fPIC" ;;
+        sim,CPPFLAGS) echo "$CPPFLAGS -mios-simulator-version-min=$IOS_MINVER -arch $MAC_ARCH -isysroot $(config sysroot) -I$(config incdir) -I$(config sysincdir) -fPIC" ;;
+        sim,LDFLAGS)  echo "$LDFLAGS  -mios-simulator-version-min=$IOS_MINVER -arch $MAC_ARCH -isysroot $(config sysroot) -L$(config libdir) -L$(config syslibdir) $LIBS" ;;
+    esac
+}
+
+
+##############################################################################
+# ENTRY POINT
+
+main "$@"
+
