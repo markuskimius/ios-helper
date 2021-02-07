@@ -21,9 +21,9 @@ OPTIONS:
 
 ACTION:
   configure [ARGS]      Run the configure script in the current directory with
-                        appropraite options to build for ios.
+                        appropraite options to build for iOS.
 
-  (any other commands)  Run the commands in the iOS environment.
+  (any other command)   Run the command in the iOS environment.
 
 EOF
 }
