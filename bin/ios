@@ -110,7 +110,7 @@ function setenv() {
     export LDFLAGS=$(config LDFLAGS)
     export CXXFLAGS=$(config CXXFLAGS)
     export CPPFLAGS=$(config CPPFLAGS)
-    export CPATH="$(config incdir):$(config sysincdir):$CPATH"
+    export CPATH="$(config incdir):$(config sdkincdir):$CPATH"
 
     export PATH="$(config prefix)/bin:$PATH"
     export PKG_CONFIG_PATH="$(config prefix)/lib/pkgconfig:$PKG_CONFIG_PATH"
@@ -142,18 +142,18 @@ function config() {
         *,incdir)     echo "$(config prefix)/include"               ;;
         *,libdir)     echo "$(config prefix)/lib"                   ;;
 
-        *,sysincdir)  echo "$(config sysroot)/usr/include"          ;;
-        *,syslibdir)  echo "$(config sysroot)/usr/lib"              ;;
+        *,sdkincdir)  echo "$(config sysroot)/usr/include"          ;;
+        *,sdklibdir)  echo "$(config sysroot)/usr/lib"              ;;
 
-        ios,CFLAGS)   echo "$CFLAGS   -miphoneos-version-min=$IOS_MINVER -arch $IOS_ARCH -isysroot $(config sysroot) -I$(config incdir) -I$(config sysincdir) -fPIC" ;;
-        ios,CXXFLAGS) echo "$CXXFLAGS -miphoneos-version-min=$IOS_MINVER -arch $IOS_ARCH -isysroot $(config sysroot) -I$(config incdir) -I$(config sysincdir) -fPIC" ;;
-        ios,CPPFLAGS) echo "$CPPFLAGS -miphoneos-version-min=$IOS_MINVER -arch $IOS_ARCH -isysroot $(config sysroot) -I$(config incdir) -I$(config sysincdir) -fPIC" ;;
-        ios,LDFLAGS)  echo "$LDFLAGS  -miphoneos-version-min=$IOS_MINVER -arch $IOS_ARCH -isysroot $(config sysroot) -L$(config libdir) -L$(config syslibdir) $LIBS" ;;
+        ios,CFLAGS)   echo "$CFLAGS   -miphoneos-version-min=$IOS_MINVER -arch $IOS_ARCH -isysroot $(config sysroot) -I$(config incdir) -I$(config sdkincdir) -fPIC" ;;
+        ios,CXXFLAGS) echo "$CXXFLAGS -miphoneos-version-min=$IOS_MINVER -arch $IOS_ARCH -isysroot $(config sysroot) -I$(config incdir) -I$(config sdkincdir) -fPIC" ;;
+        ios,CPPFLAGS) echo "$CPPFLAGS -miphoneos-version-min=$IOS_MINVER -arch $IOS_ARCH -isysroot $(config sysroot) -I$(config incdir) -I$(config sdkincdir) -fPIC" ;;
+        ios,LDFLAGS)  echo "$LDFLAGS  -miphoneos-version-min=$IOS_MINVER -arch $IOS_ARCH -isysroot $(config sysroot) -L$(config libdir) -L$(config sdklibdir) -L$(config sdklibdir)/system $LIBS" ;;
 
-        sim,CFLAGS)   echo "$CFLAGS   -mios-simulator-version-min=$IOS_MINVER -arch $MAC_ARCH -isysroot $(config sysroot) -I$(config incdir) -I$(config sysincdir) -fPIC" ;;
-        sim,CXXFLAGS) echo "$CXXFLAGS -mios-simulator-version-min=$IOS_MINVER -arch $MAC_ARCH -isysroot $(config sysroot) -I$(config incdir) -I$(config sysincdir) -fPIC" ;;
-        sim,CPPFLAGS) echo "$CPPFLAGS -mios-simulator-version-min=$IOS_MINVER -arch $MAC_ARCH -isysroot $(config sysroot) -I$(config incdir) -I$(config sysincdir) -fPIC" ;;
-        sim,LDFLAGS)  echo "$LDFLAGS  -mios-simulator-version-min=$IOS_MINVER -arch $MAC_ARCH -isysroot $(config sysroot) -L$(config libdir) -L$(config syslibdir) $LIBS" ;;
+        sim,CFLAGS)   echo "$CFLAGS   -mios-simulator-version-min=$IOS_MINVER -arch $MAC_ARCH -isysroot $(config sysroot) -I$(config incdir) -I$(config sdkincdir) -fPIC" ;;
+        sim,CXXFLAGS) echo "$CXXFLAGS -mios-simulator-version-min=$IOS_MINVER -arch $MAC_ARCH -isysroot $(config sysroot) -I$(config incdir) -I$(config sdkincdir) -fPIC" ;;
+        sim,CPPFLAGS) echo "$CPPFLAGS -mios-simulator-version-min=$IOS_MINVER -arch $MAC_ARCH -isysroot $(config sysroot) -I$(config incdir) -I$(config sdkincdir) -fPIC" ;;
+        sim,LDFLAGS)  echo "$LDFLAGS  -mios-simulator-version-min=$IOS_MINVER -arch $MAC_ARCH -isysroot $(config sysroot) -L$(config libdir) -L$(config sdklibdir) -L$(config sdklibdir)/system $LIBS" ;;
     esac
 }
 
