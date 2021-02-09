@@ -63,8 +63,8 @@ function main() {
                     return 1                         ;;
 
         help)       action=usage && shift            ;;
-        configure)  action=action-configure && shift ;;
-        *)          action=action-withenv            ;;  # Don't shift
+        configure)  action=ios-configure && shift    ;;
+        *)          action=ios-withenv               ;;  # Don't shift
     esac
 
     # Execute ACTION
@@ -72,14 +72,14 @@ function main() {
 }
 
 
-function action-withenv() {
+function ios-withenv() {
     (
         setenv && "$@"
     )
 }
 
 
-function action-configure() {
+function ios-configure() {
     ! [[ -x ./configure ]] && echo "./configure: No such executable" && return 1
 
     local opts=()
