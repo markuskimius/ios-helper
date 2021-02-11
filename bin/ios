@@ -83,13 +83,13 @@ function ios-configure() {
     ! [[ -x ./configure ]] && echo "./configure: No such executable" && return 1
 
     local opts=()
-    local env=()
+    local used=()
     local line
 
     while IFS= read -r line; do
-        [[ "$line" == *--enable-shared* ]] && [[ " $* " != *\ --enable-shared[=\ ]* ]] && opts+=( "--disable-shared"          )
-        [[ "$line" == *--prefix*        ]] && [[ " $* " != *\ --prefix[=\ ]*        ]] && opts+=( "--prefix=$(config prefix)" )
-        [[ "$line" == *--host*          ]] && [[ " $* " != *\ --host[=\ ]*          ]] && opts+=( "--host=$(config host)"     )
+        [[ "$line" == *--enable-shared* ]] && [[ " $* " != *\ --enable-shared[=\ ]* ]] && [[ " ${used[*]} " != " --disble-shared " ]] && used+=( --disable-shared ) && opts+=( "--disable-shared"          )
+        [[ "$line" == *--prefix*        ]] && [[ " $* " != *\ --prefix[=\ ]*        ]] && [[ " ${used[*]} " != " --prefix "        ]] && used+=( --prefix         ) && opts+=( "--prefix=$(config prefix)" )
+        [[ "$line" == *--host*          ]] && [[ " $* " != *\ --host[=\ ]*          ]] && [[ " ${used[*]} " != " --host "          ]] && used+=( --host           ) && opts+=( "--host=$(config host)"     )
     done < <(./configure --help)
 
     (
