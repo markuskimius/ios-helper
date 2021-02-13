@@ -47,7 +47,7 @@ ENVIRONMENT VARIABLES:
         CC      CFLAGS      CPATH
         CXX     CXXFLAGS
         CPP     CPPFLAGS
-        LD      LDFLAGS
+        LD      LDFLAGS     LIBRARY_PATH
         PATH    PKG_CONFIG_PATH
 
   To check what values are assigned to them, echo their values in a shell:
