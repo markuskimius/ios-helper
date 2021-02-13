@@ -36,7 +36,8 @@ ACTION:
   xcodebuild [ARGS]     Run xcodebuild with appropriate options to build for
                         iOS.  Following arguments are automatically passed:
 
-                            --sdk SDK
+                            -sdk SDK
+                            -project  (prefiexed before *.xcodeproj if not set)
 
   (any other command)   Run the command in the iOS build environment.
 
@@ -142,15 +143,29 @@ function ios-configure() {
 
 function ios-xcodebuild() {
     local xcodebuild=$1 && shift
-    local opts=(
-        -sdk "$(config sdk)"
-    )
+    local used=()
+    local opts=()
+    local o
+
+    for o in "$@"; do
+        [[ "$o" == -sdk        ]] && used+=( -sdk     )
+        [[ "$o" == -project    ]] && used+=( -project )
+
+        # add -project in front of *.xcodeproj if not set
+        if [[ -d "$o" ]] && [[ "$(cd "$o" && pwd)" == *.xcodeproj ]] && [[ " ${used[*]} " != " -project " ]]; then
+            opts+=( -project )
+        fi
+
+        opts+=( "$o" )
+    done
+
+    [[ " ${used[*]} " != " -sdk " ]] && opts=( -sdk "$(config sdk)" "${opts[@]}" )  # add -sdk to front if not set
 
     (
         setenv
 
-        echo "$xcodebuild" "${opts[@]}" "$@"
-        (( ! DRYRUN )) && "$xcodebuild" "${opts[@]}" "$@"
+        echo "$xcodebuild" "${opts[@]}"
+        (( ! DRYRUN )) && "$xcodebuild" "${opts[@]}"
     )
 }
 
