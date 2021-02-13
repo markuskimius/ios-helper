@@ -182,9 +182,10 @@ function setenv() {
     export LDFLAGS=$(config LDFLAGS)
     export CXXFLAGS=$(config CXXFLAGS)
     export CPPFLAGS=$(config CPPFLAGS)
-    export CPATH="$(config incdir):$(config sdkincdir):$CPATH"
 
     export PATH="$(config prefix)/bin:$PATH"
+    export CPATH="$(config incdir):$(config sdkincdir):$CPATH"
+    export LIBRARY_PATH="$(config libdir):$(config sdklibdir):$LIBRARY_PATH"
     export PKG_CONFIG_PATH="$(config prefix)/lib/pkgconfig:$PKG_CONFIG_PATH"
 }
 
