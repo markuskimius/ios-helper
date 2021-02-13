@@ -59,6 +59,9 @@ EXAMPLES:
   ios -p /usr/ios configure && make && make install    # Build for iOS into /usr/ios
   ios -sp /usr/isim configure && make && make install  # Build for iOS Simulator into /usr/isim
 
+  ios xcodebuild myproject.xcodeproj build             # Build myproject.xcodeproj
+  ios xcodebuild myproject.xcodeproj clean             # Clean myproject.xcodeproj
+
 EOF
 }
 
