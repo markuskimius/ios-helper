@@ -23,6 +23,9 @@ ACTION:
   configure [ARGS]      Run the configure script in the current directory with
                         appropraite options to build for iOS.
 
+  xcodebuild [ARGS]     Run xcodebuild with appropriate options to build for
+                        iOS.
+
   (any other command)   Run the command in the iOS environment.
 
 EOF
@@ -64,6 +67,7 @@ function main() {
 
         help)       action=usage && shift            ;;
         configure)  action=ios-configure && shift    ;;
+        xcodebuild) action=ios-xcodebuild && shift   ;;
         *)          action=ios-withenv               ;;  # Don't shift
     esac
 
@@ -97,6 +101,20 @@ function ios-configure() {
 
         echo ./configure "${opts[@]}" "$@"
         ./configure "${opts[@]}" "$@"
+    )
+}
+
+
+function ios-xcodebuild() {
+    local opts=(
+        -sdk "$(config sdk)"
+    )
+
+    (
+        setenv
+
+        echo xcodebuild "${opts[@]}" "$@"
+        xcodebuild "${opts[@]}" "$@"
     )
 }
 
