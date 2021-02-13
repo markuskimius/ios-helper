@@ -16,17 +16,47 @@ Script to help build a UNIX project for iOS.
 Usage: ${SCRIPTNAME} [OPTIONS] ACTION
 
 OPTIONS:
-  -s                    Build it for the iOS Simulator.
-  -p PREFIX             Build into PREFIX
+  -s                    Build it for the iOS Simulator instead of iOS.
+  -p PREFIX             Build into PREFIX.  Defaults:
+                            \$HOME/ios     (for iOS)
+                            \$HOME/ios-sim (for iOS Simulator)
+
+  -d                    Dry run. Do not execute ACTION but print the command
+                        that would be executed.
 
 ACTION:
-  configure [ARGS]      Run the configure script in the current directory with
-                        appropraite options to build for iOS.
+  configure [ARGS]      Run the configure script with appropriate options to
+                        build for iOS.  Following arguments are automatically
+                        passed:
+
+                            --prefix PREFIX  (from "-p PREFIX" above)
+                            --disable-shared
+                            --host HOST
 
   xcodebuild [ARGS]     Run xcodebuild with appropriate options to build for
-                        iOS.
+                        iOS.  Following arguments are automatically passed:
 
-  (any other command)   Run the command in the iOS environment.
+                            --sdk SDK
+
+  (any other command)   Run the command in the iOS build environment.
+
+ENVIRONMENT VARIABLES:
+  ACTION is executed in an environment with these variables set:
+
+        CC      CFLAGS      CPATH
+        CXX     CXXFLAGS
+        CPP     CPPFLAGS
+        LD      LDFLAGS
+        PATH    PKG_CONFIG_PATH
+
+  To check what values are assigned to them, echo their values in a shell:
+
+        ios bash -c 'echo "\$CFLAGS"'     # Value of CFLAGS in the iOS build environment
+        ios -s bash -c 'echo "\$CFLAGS"'  # Value of CFLAGS in the iOS Simulator build environment
+
+EXAMPLES:
+  ios -p /usr/ios configure && make && make install    # Build for iOS into /usr/ios
+  ios -sp /usr/isim configure && make && make install  # Build for iOS Simulator into /usr/isim
 
 EOF
 }
@@ -41,16 +71,18 @@ MAC_ARCH=${MAC_ARCH-$(uname -m)}
 IOS_MINVER=${IOS_MINVER-9.0}
 IOS_ARCH=${IOS_ARCH-arm64}
 PLATFORM=ios
+DRYRUN=0
 
 function main() {
     local OPTIND OPTARG opt
     local action
 
     # Parse OPTIONS
-    while getopts "sp:h" opt; do
+    while getopts "sp:dh" opt; do
         case "$opt" in
             s)  PLATFORM=sim           ;;
-            P)  PREFIX=$OPTARG         ;;
+            p)  PREFIX=$OPTARG         ;;
+            d)  DRYRUN=1               ;;
             h)  usage && return 0      ;;
             *)  usage 1>&2 && return 1 ;;
         esac
@@ -58,17 +90,18 @@ function main() {
     shift $((OPTIND-1))
 
     # Validate ACTION
-    action=$1
-
-    case "$action" in
+    case "$(basename "$1")" in
         "")         echo "ACTION required" 1>&2
                     usage 1>&2
-                    return 1                         ;;
+                    return 1                ;;
 
-        help)       action=usage && shift            ;;
-        configure)  action=ios-configure && shift    ;;
-        xcodebuild) action=ios-xcodebuild && shift   ;;
-        *)          action=ios-withenv               ;;  # Don't shift
+        configure)  action=ios-configure    ;;
+        xcodebuild) action=ios-xcodebuild   ;;
+        *)          action=ios-withenv      ;;
+    esac
+
+    case "$1" in
+        help)       action=usage            ;;
     esac
 
     # Execute ACTION
@@ -84,28 +117,31 @@ function ios-withenv() {
 
 
 function ios-configure() {
-    ! [[ -x ./configure ]] && echo "./configure: No such executable" && return 1
-
+    local configure=$1 && shift
     local opts=()
     local used=()
     local line
+
+    ! command -v "$configure" >/dev/null && configure=./configure                              # default to ./configure
+    ! command -v "$configure" >/dev/null && echo "$configure: No such executable" && return 1  # error if no configure
 
     while IFS= read -r line; do
         [[ "$line" == *--enable-shared* ]] && [[ " $* " != *\ --enable-shared[=\ ]* ]] && [[ " ${used[*]} " != " --disble-shared " ]] && used+=( --disable-shared ) && opts+=( "--disable-shared"          )
         [[ "$line" == *--prefix*        ]] && [[ " $* " != *\ --prefix[=\ ]*        ]] && [[ " ${used[*]} " != " --prefix "        ]] && used+=( --prefix         ) && opts+=( "--prefix=$(config prefix)" )
         [[ "$line" == *--host*          ]] && [[ " $* " != *\ --host[=\ ]*          ]] && [[ " ${used[*]} " != " --host "          ]] && used+=( --host           ) && opts+=( "--host=$(config host)"     )
-    done < <(./configure --help)
+    done < <("$configure" --help)
 
     (
         setenv
 
-        echo ./configure "${opts[@]}" "$@"
-        ./configure "${opts[@]}" "$@"
+        echo "$configure" "${opts[@]}" "$@"
+        (( ! DRYRUN )) && "$configure" "${opts[@]}" "$@"
     )
 }
 
 
 function ios-xcodebuild() {
+    local xcodebuild=$1 && shift
     local opts=(
         -sdk "$(config sdk)"
     )
@@ -113,8 +149,8 @@ function ios-xcodebuild() {
     (
         setenv
 
-        echo xcodebuild "${opts[@]}" "$@"
-        xcodebuild "${opts[@]}" "$@"
+        echo "$xcodebuild" "${opts[@]}" "$@"
+        (( ! DRYRUN )) && "$xcodebuild" "${opts[@]}" "$@"
     )
 }
 

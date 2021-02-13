@@ -29,20 +29,15 @@ Alternatively, `git clone https://github.com/markuskimius/ios-helper` then put
 ## Usage
 
 For the majority of programs normally built with `./configure && make && make
-install`, just typing `ios configure && make && make install` will build and
+install`, just typing `ios ./configure && make && make install` will build and
 install the software for the iOS.  Use `isim` instead of `ios` to build it for
 the iOS Simulator.
 
-Note the lack of `./` in front of `configure`; `configure` is an argument to
-`ios`, not the path to the configure script.  The `configure` argument expects
-the `configure` script to be in the current directory.
-
-By default, iOS files are installed into `$HOME/ios` and iOS Simulator files
-are installed into `$HOME/ios-sim`.  This may be changed by passing the `-p
-PREFIX` option to `ios` or `isim`, before `configure`.  Forwarding this value
-to `configure` as `--prefix=PREFIX` is handled by `ios` or `isim`.  If
-additional options need to be passed to `configure`, just pass it after
-`configure`, which may be occasionally necessary to build an app for iOS.
+By default iOS files are installed to `$HOME/ios` and iOS Simulator files to
+`$HOME/ios-sim`.  Change it by passing `-p PREFIX` to `ios` _before_
+`configure` which sets the environment variables appropriately and passes
+`--prefix=PREFIX` to `configure` automatically.  Other arguments may be passed
+to `configure` _after_ `configure`.
 
 As of this writing only one architecture can be targeted per build.  As in, no
 universal binaries (for now).  By default iOS targets `arm64`; iOS Simulator
