@@ -13,13 +13,19 @@ function usage() {
     cat <<EOF
 Script to help build a UNIX project for iOS.
 
-Usage: ${SCRIPTNAME} [OPTIONS] ACTION
+Usage: ${IOS_SCRIPTNAME} [OPTIONS] ACTION
 
 OPTIONS:
   -s                    Build it for the iOS Simulator instead of iOS.
+
   -p PREFIX             Build into PREFIX.  Defaults:
                             \$HOME/ios     (for iOS)
                             \$HOME/ios-sim (for iOS Simulator)
+
+  -a ARCH               Build for the ARCH architecture.  See ARCHITECTURE
+                        section below.
+
+  -t TARGET             Use custom host TARGET.  See TARGET section below.
 
   -d                    Dry run. Do not execute ACTION but print the command
                         that would be executed.
@@ -33,7 +39,7 @@ ACTION:
 
                             --prefix PREFIX  (from "-p PREFIX" above)
                             --disable-shared
-                            --host HOST
+                            --host TARGET
 
   xcodebuild [ARGS]     Run xcodebuild with appropriate options to build for
                         iOS.  Following arguments are automatically passed:
@@ -42,6 +48,46 @@ ACTION:
                             -project  (prefiexed before *.xcodeproj if not set)
 
   (any other command)   Run the command in the iOS build environment.
+
+ARCHITECTURE:
+  ARCH is the name of the CPU architecture under which the final binary will
+  run.  This value is passed to the compiler (clang) so it is a standardized
+  value understood by the compiler.  ARCH is often also the first part of the
+  TARGET triplet (see TARGET section below), but not always, since the TARGET
+  triplet is specific to the project that may or may not have been built with
+  the same architecture naming convention as clang.
+
+  As of this writing, the following ARCH values are practical for building iOS:
+
+    ARCH    Description     For iPhones             For iOS Simulators on
+    armv7   32-bit ARMv7    iPhone 4S and earlier 
+    armv7s  32-bit ARMv7s   iPhone 5, 5C
+    arm64   64-bit ARM      iPhone 5S and later     M1 Mac
+    x86     32-bit Intel                            Intel Mac, 32-bit macOS
+    x86_64  64-bit Intel                            Intel Mac, 64-bit macOS
+
+  The defaults are:
+
+    iOS             $IOS_ARCH
+    iOS Simulator   Same as the Mac under which $IOS_SCRIPTNAME runs ($MAC_ARCH)
+
+TARGET:
+  TARGET a triplet in the format *-*-* that describes the host under which the
+  final binary will run.  It almost always includes the CPU architecture and
+  the operating system, and may also include the OS vendor and/or the version.
+
+  Unfortunately each project may define its own triplet so there is no one
+  value or pattern of values can always build an iOS project, but the following
+  defaults seem to work most of the time:
+
+            iOS             $(config default-host ios)
+            iOS Simulator   $(config default-host sim)
+
+  Alternative defaults are available by specifying a reserved TARGET name:
+
+    TARGET
+    rust    iOS             $(config rust-host ios)
+            iOS Simulator   $(config rust-host sim)
 
 ENVIRONMENT VARIABLES:
   ACTION is executed in an environment with these variables set:
@@ -72,29 +118,49 @@ EOF
 ##############################################################################
 # PROGRAM BEGINS HERE
 
-SCRIPTNAME=$(basename "${BASH_SOURCE}")
+IOS_SCRIPTNAME=$(basename "${BASH_SOURCE}")
 MAC_MINVER=${MAC_MINVER-darwin14.0.0}
 MAC_ARCH=${MAC_ARCH-$(uname -m)}
 IOS_MINVER=${IOS_MINVER-9.0}
 IOS_ARCH=${IOS_ARCH-arm64}
-PLATFORM=ios
-DRYRUN=0
+IOS_PLATFORM=ios
+IOS_DRYRUN=0
+IOS_TARGET=default
+
+IOS_VALID_TARGETS=( default rust )
+IOS_VALID_PLATFORMS=( ios sim )
+IOS_VALID_ARCHS=( armv7 armv7s arm64 x86 x86_64 )
+
 
 function main() {
     local OPTIND OPTARG opt
     local action
 
     # Parse OPTIONS
-    while getopts "sp:dh" opt; do
+    while getopts "sp:a:t:dh" opt; do
         case "$opt" in
-            s)  PLATFORM=sim           ;;
-            p)  PREFIX=$OPTARG         ;;
-            d)  DRYRUN=1               ;;
+            s)  IOS_PLATFORM=sim       ;;
+            p)  IOS_PREFIX=$OPTARG     ;;
+            a)  IOS_ARCH=$OPTARG
+                MAC_ARCH=$OPTARG       ;;
+            t)  IOS_TARGET=$OPTARG     ;;
+            d)  IOS_DRYRUN=1           ;;
             h)  usage && return 0      ;;
             *)  usage 1>&2 && return 1 ;;
         esac
     done
     shift $((OPTIND-1))
+
+    # Validate OPTIONS
+    if [[ " ${IOS_VALID_ARCHS[*]} " != *" $IOS_ARCH "* ]]; then
+        echo "${IOS_ARCH}: Unknown architecture, proceeding anyway" 1>&2
+        # return 1
+    fi
+
+    if [[ " ${IOS_VALID_TARGETS[*]} " != *" $IOS_TARGET "* && "$IOS_TARGET" != *-*-* ]]; then
+        echo "${IOS_TARGET}: Invalid target" 1>&2
+        return 1
+    fi
 
     # Validate ACTION
     case "$(basename "$1")" in
@@ -156,7 +222,7 @@ function ios-configure() {
         setenv
 
         echo "$configure" "${opts[@]}" "$@"
-        (( ! DRYRUN )) && "$configure" "${opts[@]}" "$@"
+        (( ! IOS_DRYRUN )) && "$configure" "${opts[@]}" "$@"
     )
 }
 
@@ -185,7 +251,7 @@ function ios-xcodebuild() {
         setenv
 
         echo "$xcodebuild" "${opts[@]}"
-        (( ! DRYRUN )) && "$xcodebuild" "${opts[@]}"
+        (( ! IOS_DRYRUN )) && "$xcodebuild" "${opts[@]}"
     )
 }
 
@@ -204,14 +270,15 @@ function setenv() {
     export CPATH="$(config incdir):$(config sdkincdir):$CPATH"
     export LIBRARY_PATH="$(config libdir):$(config sdklibdir):$LIBRARY_PATH"
     export PKG_CONFIG_PATH="$(config prefix)/lib/pkgconfig:$PKG_CONFIG_PATH"
-    export RUST_TARGET=$(config rust-target)
-    # export CARGO_BUILD_TARGET=$(config rust-target)
+    export RUST_TARGET=$(config rust-host)
+    # export CARGO_BUILD_TARGET=$(config rust-host)
     # export RUSTFLAGS=$(config rust-flags)
 }
 
 
 function config() {
     local what=$1
+    local platform=${2-$IOS_PLATFORM}
     local altarch=$IOS_ARCH
     local rustarch=$IOS_ARCH
 
@@ -223,40 +290,46 @@ function config() {
         rustarch=aarch64
     fi
 
-    case "${PLATFORM},${what}" in
-        ios,sdk)      echo iphoneos        ;;
-        sim,sdk)      echo iphonesimulator ;;
+    case "${IOS_TARGET},${what}" in
+        rust,host)      what=rust-host      ;;
+        default,host)   what=default-host   ;;
+        *-*-*,host)     what=custom-host    ;;
+    esac
 
-        ios,prefix)   echo "${PREFIX-${HOME}/ios}"                  ;;
-        sim,prefix)   echo "${PREFIX-${HOME}/ios-sim}"              ;;
+    case "${platform},${what}" in
+        ios,sdk)           echo iphoneos        ;;
+        sim,sdk)           echo iphonesimulator ;;
 
-        ios,host)     echo "${altarch}-ios-${MAC_MINVER}"           ;;
-        sim,host)     echo "${MAC_ARCH}-ios-${MAC_MINVER}"          ;;
+        ios,prefix)        echo "${IOS_PREFIX-${HOME}/ios}"              ;;
+        sim,prefix)        echo "${IOS_PREFIX-${HOME}/ios-sim}"          ;;
 
-        *,cpp)        echo $(xcrun --sdk $(config sdk) -f clang) -E ;;
-        *,clang)      xcrun --sdk $(config sdk) -f clang            ;;
-        *,sysroot)    xcrun --sdk $(config sdk) --show-sdk-path     ;;
+        ios,rust-host)     echo "${rustarch}-apple-ios"                  ;;
+        sim,rust-host)     echo "${MAC_ARCH}-apple-ios"                  ;;
+        ios,default-host)  echo "${altarch}-ios-${MAC_MINVER}"           ;;
+        sim,default-host)  echo "${MAC_ARCH}-ios-${MAC_MINVER}"          ;;
+        *,custom-host)     echo "$IOS_TARGET"                            ;;
 
-        *,incdir)     echo "$(config prefix)/include"               ;;
-        *,libdir)     echo "$(config prefix)/lib"                   ;;
+        *,cpp)             echo $(xcrun --sdk $(config sdk) -f clang) -E ;;
+        *,clang)           xcrun --sdk $(config sdk) -f clang            ;;
+        *,sysroot)         xcrun --sdk $(config sdk) --show-sdk-path     ;;
 
-        *,sdkincdir)  echo "$(config sysroot)/usr/include"          ;;
-        *,sdklibdir)  echo "$(config sysroot)/usr/lib"              ;;
+        *,incdir)          echo "$(config prefix)/include"               ;;
+        *,libdir)          echo "$(config prefix)/lib"                   ;;
 
-        ios,CFLAGS)   echo "$CFLAGS   -miphoneos-version-min=$IOS_MINVER -arch $IOS_ARCH -isysroot $(config sysroot) -I$(config incdir) -I$(config sdkincdir) -fPIC" ;;
-        ios,CXXFLAGS) echo "$CXXFLAGS -miphoneos-version-min=$IOS_MINVER -arch $IOS_ARCH -isysroot $(config sysroot) -I$(config incdir) -I$(config sdkincdir) -fPIC" ;;
-        ios,CPPFLAGS) echo "$CPPFLAGS -miphoneos-version-min=$IOS_MINVER -arch $IOS_ARCH -isysroot $(config sysroot) -I$(config incdir) -I$(config sdkincdir) -fPIC" ;;
-        ios,LDFLAGS)  echo "$LDFLAGS  -miphoneos-version-min=$IOS_MINVER -arch $IOS_ARCH -isysroot $(config sysroot) -L$(config libdir) -L$(config sdklibdir) $LIBS" ;;
+        *,sdkincdir)       echo "$(config sysroot)/usr/include"          ;;
+        *,sdklibdir)       echo "$(config sysroot)/usr/lib"              ;;
 
-        sim,CFLAGS)   echo "$CFLAGS   -mios-simulator-version-min=$IOS_MINVER -arch $MAC_ARCH -isysroot $(config sysroot) -I$(config incdir) -I$(config sdkincdir) -fPIC" ;;
-        sim,CXXFLAGS) echo "$CXXFLAGS -mios-simulator-version-min=$IOS_MINVER -arch $MAC_ARCH -isysroot $(config sysroot) -I$(config incdir) -I$(config sdkincdir) -fPIC" ;;
-        sim,CPPFLAGS) echo "$CPPFLAGS -mios-simulator-version-min=$IOS_MINVER -arch $MAC_ARCH -isysroot $(config sysroot) -I$(config incdir) -I$(config sdkincdir) -fPIC" ;;
-        sim,LDFLAGS)  echo "$LDFLAGS  -mios-simulator-version-min=$IOS_MINVER -arch $MAC_ARCH -isysroot $(config sysroot) -L$(config libdir) -L$(config sdklibdir) $LIBS" ;;
+        ios,CFLAGS)        echo "$CFLAGS   -miphoneos-version-min=$IOS_MINVER -arch $IOS_ARCH -isysroot $(config sysroot) -I$(config incdir) -I$(config sdkincdir) -fPIC" ;;
+        ios,CXXFLAGS)      echo "$CXXFLAGS -miphoneos-version-min=$IOS_MINVER -arch $IOS_ARCH -isysroot $(config sysroot) -I$(config incdir) -I$(config sdkincdir) -fPIC" ;;
+        ios,CPPFLAGS)      echo "$CPPFLAGS -miphoneos-version-min=$IOS_MINVER -arch $IOS_ARCH -isysroot $(config sysroot) -I$(config incdir) -I$(config sdkincdir) -fPIC" ;;
+        ios,LDFLAGS)       echo "$LDFLAGS  -miphoneos-version-min=$IOS_MINVER -arch $IOS_ARCH -isysroot $(config sysroot) -L$(config libdir) -L$(config sdklibdir) $LIBS" ;;
 
-        ios,rust-target)  echo "${rustarch}-apple-ios" ;;
-        sim,rust-target)  echo "${MAC_ARCH}-apple-ios" ;;
+        sim,CFLAGS)        echo "$CFLAGS   -mios-simulator-version-min=$IOS_MINVER -arch $MAC_ARCH -isysroot $(config sysroot) -I$(config incdir) -I$(config sdkincdir) -fPIC" ;;
+        sim,CXXFLAGS)      echo "$CXXFLAGS -mios-simulator-version-min=$IOS_MINVER -arch $MAC_ARCH -isysroot $(config sysroot) -I$(config incdir) -I$(config sdkincdir) -fPIC" ;;
+        sim,CPPFLAGS)      echo "$CPPFLAGS -mios-simulator-version-min=$IOS_MINVER -arch $MAC_ARCH -isysroot $(config sysroot) -I$(config incdir) -I$(config sdkincdir) -fPIC" ;;
+        sim,LDFLAGS)       echo "$LDFLAGS  -mios-simulator-version-min=$IOS_MINVER -arch $MAC_ARCH -isysroot $(config sysroot) -L$(config libdir) -L$(config sdklibdir) $LIBS" ;;
 
-        *,rust-flags)     echo "${RUSTFLAGS} --target=$(config rust-target) --crate-type=bin,staticlib"
+        *,rust-flags)      echo "$RUSTFLAGS --target=$(config rust-host) --crate-type=bin,staticlib"
     esac
 }
 
