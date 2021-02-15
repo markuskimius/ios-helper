@@ -25,6 +25,8 @@ OPTIONS:
                         that would be executed.
 
 ACTION:
+  echo VARNAME          Print the value of VARNAME in the build environment.
+
   configure [ARGS]      Run the configure script with appropriate options to
                         build for iOS.  Following arguments are automatically
                         passed:
@@ -49,11 +51,12 @@ ENVIRONMENT VARIABLES:
         CPP     CPPFLAGS
         LD      LDFLAGS     LIBRARY_PATH
         PATH    PKG_CONFIG_PATH
+                RUST_TARGET
 
-  To check what values are assigned to them, echo their values in a shell:
+  To check what values are assigned to them, echo their values:
 
-        ios bash -c 'echo "\$CFLAGS"'     # Value of CFLAGS in the iOS build environment
-        ios -s bash -c 'echo "\$CFLAGS"'  # Value of CFLAGS in the iOS Simulator build environment
+        ios echo CFLAGS                   # Value of CFLAGS in the iOS build environment
+        ios -s echo CFLAGS                # Value of CFLAGS in the iOS Simulator build environment
 
 EXAMPLES:
   ios -p /usr/ios configure && make && make install    # Build for iOS into /usr/ios
@@ -105,7 +108,8 @@ function main() {
     esac
 
     case "$1" in
-        help)       action=usage            ;;
+        help)       action=usage && shift    ;;
+        echo)       action=ios-echo && shift ;;
     esac
 
     # Execute ACTION
@@ -120,6 +124,18 @@ function ios-withenv() {
 }
 
 
+function ios-echo() {
+    ios-withenv bash <(cat <<EOF
+        varnames=( $@ )
+
+        for i in "\${varnames[@]}"; do
+            eval "echo \$i=\\\$\$i"
+        done
+EOF
+    )
+}
+
+
 function ios-configure() {
     local configure=$1 && shift
     local opts=()
@@ -130,9 +146,10 @@ function ios-configure() {
     ! command -v "$configure" >/dev/null && echo "$configure: No such executable" && return 1  # error if no configure
 
     while IFS= read -r line; do
-        [[ "$line" == *--enable-shared* ]] && [[ " $* " != *\ --enable-shared[=\ ]* ]] && [[ " ${used[*]} " != " --disble-shared " ]] && used+=( --disable-shared ) && opts+=( "--disable-shared"          )
-        [[ "$line" == *--prefix*        ]] && [[ " $* " != *\ --prefix[=\ ]*        ]] && [[ " ${used[*]} " != " --prefix "        ]] && used+=( --prefix         ) && opts+=( "--prefix=$(config prefix)" )
-        [[ "$line" == *--host*          ]] && [[ " $* " != *\ --host[=\ ]*          ]] && [[ " ${used[*]} " != " --host "          ]] && used+=( --host           ) && opts+=( "--host=$(config host)"     )
+        [[ "$line" == *--enable-shared* ]] && [[ " $* " != *\ --enable-shared[=\ ]* ]] && [[ " ${used[*]} " != " --disble-shared " ]] && used+=( --disable-shared ) && opts+=( "--disable-shared"                   )
+        [[ "$line" == *--prefix*        ]] && [[ " $* " != *\ --prefix[=\ ]*        ]] && [[ " ${used[*]} " != " --prefix "        ]] && used+=( --prefix         ) && opts+=( "--prefix=$(config prefix)"          )
+        [[ "$line" == *--host*          ]] && [[ " $* " != *\ --host[=\ ]*          ]] && [[ " ${used[*]} " != " --host "          ]] && used+=( --host           ) && opts+=( "--host=$(config host)"              )
+        [[ "$line" == *--with-sysroot*  ]] && [[ " $* " != *\ --with-sysroot[=\ ]*  ]] && [[ " ${used[*]} " != " --with-sysroot "  ]] && used+=( --with-sysroot   ) && opts+=( "--with-sysroot=$(config sdklibdir)" )
     done < <("$configure" --help)
 
     (
@@ -187,15 +204,23 @@ function setenv() {
     export CPATH="$(config incdir):$(config sdkincdir):$CPATH"
     export LIBRARY_PATH="$(config libdir):$(config sdklibdir):$LIBRARY_PATH"
     export PKG_CONFIG_PATH="$(config prefix)/lib/pkgconfig:$PKG_CONFIG_PATH"
+    export RUST_TARGET=$(config rust-target)
+    # export CARGO_BUILD_TARGET=$(config rust-target)
+    # export RUSTFLAGS=$(config rust-flags)
 }
 
 
 function config() {
     local what=$1
     local altarch=$IOS_ARCH
+    local rustarch=$IOS_ARCH
 
     if [[ "$altarch" == "arm64" ]]; then
         altarch=arm
+    fi
+
+    if [[ "$rustarch" == "arm64" ]]; then
+        rustarch=aarch64
     fi
 
     case "${PLATFORM},${what}" in
@@ -227,6 +252,11 @@ function config() {
         sim,CXXFLAGS) echo "$CXXFLAGS -mios-simulator-version-min=$IOS_MINVER -arch $MAC_ARCH -isysroot $(config sysroot) -I$(config incdir) -I$(config sdkincdir) -fPIC" ;;
         sim,CPPFLAGS) echo "$CPPFLAGS -mios-simulator-version-min=$IOS_MINVER -arch $MAC_ARCH -isysroot $(config sysroot) -I$(config incdir) -I$(config sdkincdir) -fPIC" ;;
         sim,LDFLAGS)  echo "$LDFLAGS  -mios-simulator-version-min=$IOS_MINVER -arch $MAC_ARCH -isysroot $(config sysroot) -L$(config libdir) -L$(config sdklibdir) $LIBS" ;;
+
+        ios,rust-target)  echo "${rustarch}-apple-ios" ;;
+        sim,rust-target)  echo "${MAC_ARCH}-apple-ios" ;;
+
+        *,rust-flags)     echo "${RUSTFLAGS} --target=$(config rust-target) --crate-type=bin,staticlib"
     esac
 }
 
