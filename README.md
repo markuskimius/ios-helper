@@ -34,16 +34,18 @@ install the software for the iOS.  Use `isim` instead of `ios` to build it for
 the iOS Simulator.
 
 By default iOS files are installed to `$HOME/ios` and iOS Simulator files to
-`$HOME/ios-sim`.  Change it by passing `-p PREFIX` to `ios` _before_
-`configure` which sets the environment variables appropriately and passes
-`--prefix=PREFIX` to `configure` automatically.  Other arguments may be passed
-to `configure` _after_ `configure`.
+`$HOME/ios-sim`.  Change it by setting the environment variable `IOS_PREFIX`.
+It may also be set by by passing `-p PREFIX` to `ios` _before_ `configure`
+which sets the environment variables appropriately and passes `--prefix=PREFIX`
+to `configure` automatically.  Other arguments may be passed to `configure`
+_after_ `configure`.
 
 As of this writing only one architecture can be targeted per build.  As in, no
 universal binaries (for now).  By default iOS targets `arm64`; iOS Simulator
-targets the architecture of the Mac under which the script is run.  Set the
-environment variables `IOS_ARCH` and `MAC_ARCH`, respectively, before running
-`ios` or `isim` to change these defaults.
+targets the architecture of the Mac under which the script is run.  Change
+these defaults by setting the environment variables `IOS_ARCH` and `MAC_ARCH`,
+respectively, before running `ios` or `isim`.  The architecture may also be
+set by passing `-a ARCH` option before `configure`.
 
 
 ## Examples
