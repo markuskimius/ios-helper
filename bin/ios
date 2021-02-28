@@ -62,7 +62,8 @@ ARCHITECTURE:
     ARCH    Description     For iPhones             For iOS Simulators on
     armv7   32-bit ARMv7    iPhone 4S and earlier 
     armv7s  32-bit ARMv7s   iPhone 5, 5C
-    arm64   64-bit ARM      iPhone 5S and later     M1 Mac
+    arm64   64-bit ARM      iPhone 5S through X
+    arm64e  64-bit ARMe     iPhone XS and later     M1 Mac
     x86     32-bit Intel                            Intel Mac, 32-bit macOS
     x86_64  64-bit Intel                            Intel Mac, 64-bit macOS
 
@@ -129,7 +130,7 @@ IOS_TARGET=default
 
 IOS_VALID_TARGETS=( default rust )
 IOS_VALID_PLATFORMS=( ios sim )
-IOS_VALID_ARCHS=( armv7 armv7s arm64 x86 x86_64 )
+IOS_VALID_ARCHS=( armv7 armv7s arm64 arm64e x86 x86_64 )
 
 
 function main() {
@@ -282,11 +283,11 @@ function config() {
     local altarch=$IOS_ARCH
     local rustarch=$IOS_ARCH
 
-    if [[ "$altarch" == "arm64" ]]; then
+    if [[ "$altarch" == "arm64"* ]]; then
         altarch=arm
     fi
 
-    if [[ "$rustarch" == "arm64" ]]; then
+    if [[ "$rustarch" == "arm64"* ]]; then
         rustarch=aarch64
     fi
 
@@ -329,7 +330,7 @@ function config() {
         sim,CPPFLAGS)      echo "$CPPFLAGS -mios-simulator-version-min=$IOS_MINVER -arch $MAC_ARCH -isysroot $(config sysroot) -I$(config incdir) -I$(config sdkincdir) -fPIC" ;;
         sim,LDFLAGS)       echo "$LDFLAGS  -mios-simulator-version-min=$IOS_MINVER -arch $MAC_ARCH -isysroot $(config sysroot) -L$(config libdir) -L$(config sdklibdir) $LIBS" ;;
 
-        *,rust-flags)      echo "$RUSTFLAGS --target=$(config rust-host) --crate-type=bin,staticlib"
+        # *,rust-flags)      echo "$RUSTFLAGS --target=$(config rust-host) --crate-type=bin,staticlib"
     esac
 }
 
