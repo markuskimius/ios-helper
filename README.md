@@ -19,10 +19,7 @@ installed with the command line tools.
 
 ## Installation
 
-The easiest way to install ios-helper is to install [cafe] then run `cafe
-install-git https://github.com/markuskimius/ios-helper`
-
-Alternatively, `git clone https://github.com/markuskimius/ios-helper` then put
+`git clone https://github.com/markuskimius/ios-helper` then put
 `ios-helper/bin` in your `PATH`.
 
 
